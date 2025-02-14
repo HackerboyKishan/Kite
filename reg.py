@@ -180,26 +180,36 @@ def process_wallet(private_key, wallet_index, total_wallets, referral_code):
         log_error("eth auth failed. Skipping wallet.")
         return False
     log_success("Account reg ✅")
+    
+    # Save the user data
     try:
         with open("userids.txt", "a", encoding="utf-8") as f:
             f.write(f"{user_id}\n")
         with open("key.txt", "a", encoding="utf-8") as f:
             f.write(f"{private_key}\n")
+
+        # Corrected: Save wallet address using privateKeyToAccount
+        acct = Account.privateKeyToAccount(private_key)  # Convert private key to Account
+        wallet_address = acct.address  # Get wallet address
         with open("wallet.txt", "a", encoding="utf-8") as f:
-            f.write(f"{Account.privateKeyToAccount(private_key).address}\n")
+            f.write(f"{wallet_address}\n")
+        log_success(f"Wallet Address saved: {wallet_address}")
     except Exception as e:
         log_error(f"Error saving user data: {e}")
         return False
+    
     social_url = "https://api-kiteai.bonusblock.io/api/forward-link/go/kiteai-mission-social-3"
     if forward_api(social_url, token):
         log_success("Join Tg ✅")
     else:
         log_error("Social API call failed.")
+    
     tutorial_url = "https://api-kiteai.bonusblock.io/api/forward-link/go/kiteai-mission-tutorial-1"
     if forward_api(tutorial_url, token):
         log_success("Complete tutorial ✅")
     else:
         log_error("Tutorial API call failed.")
+    
     return True
 
 def generate_keys(num_keys):
