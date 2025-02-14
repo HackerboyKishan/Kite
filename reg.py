@@ -1,4 +1,4 @@
-import os
+import requests
 import time
 import datetime
 import json
@@ -7,7 +7,6 @@ import random
 from colorama import init, Fore, Style
 from eth_account import Account
 from eth_account.messages import encode_defunct
-from multiprocessing import Pool, cpu_count
 
 init(autoreset=True)
 USE_PROXY = False
@@ -86,7 +85,7 @@ def sign_payload(payload, private_key):
         log_error(f"Error signing payload: {e}")
         return None
 
-def eth_auth(signed_message, nonce, referral_code):
+def eth_auth(signed_message, nonce, referral_id):
     url = "https://api-kiteai.bonusblock.io/api/auth/eth"
     headers = {
         "accept": "application/json, text/plain, */*",
@@ -104,7 +103,7 @@ def eth_auth(signed_message, nonce, referral_code):
         "blockchainName": "ethereum",
         "signedMessage": signed_message,
         "nonce": nonce,
-        "referralId": referral_code  # Use the user-input referral code here
+        "referralId": referral_id  # Use the provided referral code
     }
     log_info("Sending eth auth request...")
     try:
@@ -156,7 +155,7 @@ def forward_api(url, token):
         log_error(f"Error calling {url}: {e}")
         return False
 
-def process_wallet(private_key, wallet_index, total_wallets, referral_code):
+def process_wallet(private_key, wallet_index, total_wallets, referral_id):
     log_info(f"Processing wallet {wallet_index}/{total_wallets}...")
     nonce = f"timestamp_{int(time.time() * 1000)}"
     log_info(f"Using nonce: {nonce}")
@@ -173,24 +172,16 @@ def process_wallet(private_key, wallet_index, total_wallets, referral_code):
     if not signed_message:
         log_error("Failed to sign message. Skipping wallet.")
         return False
-    token, user_id = eth_auth(signed_message, nonce, referral_code)
+    token, user_id = eth_auth(signed_message, nonce, referral_id)
     if token is None or user_id is None:
         log_error("eth auth failed. Skipping wallet.")
         return False
     log_success("Account reg ✅")
-    
-    # Write the private key and address to files
     try:
-        address = Account.privateKeyToAccount(private_key).address
-        with open("key.txt", "a", encoding="utf-8") as f:
-            f.write(f"{private_key}\n")
-        with open("wallet.txt", "a", encoding="utf-8") as f:
-            f.write(f"{address}\n")
-        log_success(f"Successfully saved private key and address for wallet {wallet_index}")
+        with open("userids.txt", "a", encoding="utf-8") as f:
+            f.write(f"{user_id}\n")
     except Exception as e:
-        log_error(f"Error saving private key and address: {e}")
-    
-    # Process social and tutorial steps
+        log_error(f"Error writing userId to file: {e}")
     social_url = "https://api-kiteai.bonusblock.io/api/forward-link/go/kiteai-mission-social-3"
     if forward_api(social_url, token):
         log_success("Join Tg ✅")
@@ -206,9 +197,8 @@ def process_wallet(private_key, wallet_index, total_wallets, referral_code):
 def main():
     banner()
     
-    # Ask for referral code and how many referrals
-    referral_code = input("Enter your referral code: ").strip()
-    referrals_to_process = int(input("How many referrals would you like to process? ").strip())
+    referral_id = input("Enter your referral code: ").strip()
+    total_accounts = int(input("How many accounts do you want to process? "))
     
     use_proxy_input = input("Do you want to use a proxy? (yes/no): ").strip().lower()
     global USE_PROXY, proxies_list
@@ -225,27 +215,26 @@ def main():
             USE_PROXY = False
     else:
         USE_PROXY = False
-
+    
     try:
         with open("key.txt", "r", encoding="utf-8") as f:
             keys = [line.strip() for line in f if line.strip()]
     except Exception as e:
         log_error(f"Error reading key.txt: {e}")
         sys.exit(1)
-
-    total_wallets = min(len(keys), referrals_to_process)
+    
+    total_wallets = len(keys)
     log_info(f"Total wallets to process: {total_wallets}")
     processed_count = 0
 
-    for index, private_key in enumerate(keys[:total_wallets], start=1):
-        success = process_wallet(private_key, index, total_wallets, referral_code)
+    for index, private_key in enumerate(keys[:total_accounts], start=1):
+        success = process_wallet(private_key, index, total_wallets, referral_id)
         if success:
             processed_count += 1
         log_info(f"Processed wallets so far: {processed_count}/{total_wallets}")
-        if index < total_wallets:
+        if index < total_accounts:
             log_info("Waiting 20 seconds before processing the next wallet...")
             time.sleep(20)
-    
     log_success(f"All processing completed. Total wallets processed: {processed_count}/{total_wallets}")
 
 if __name__ == "__main__":
