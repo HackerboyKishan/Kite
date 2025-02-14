@@ -245,7 +245,7 @@ def main():
         log_info(f"Processed wallets so far: {processed_count}/{total_wallets}")
         if index < total_wallets:
             log_info("Waiting 20 seconds before processing the next wallet...")
-            time.sleep(1)
+            time.sleep(10)
     log_success(f"All processing completed. Total wallets processed: {processed_count}/{total_wallets}")
 
 if __name__ == "__main__":
