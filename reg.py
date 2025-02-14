@@ -7,8 +7,10 @@ import random
 from colorama import init, Fore, Style
 from eth_account import Account
 from eth_account.messages import encode_defunct
+from multiprocessing import Pool, cpu_count
 
 init(autoreset=True)
+
 USE_PROXY = False
 proxies_list = []
 
@@ -103,7 +105,7 @@ def eth_auth(signed_message, nonce, referral_id):
         "blockchainName": "ethereum",
         "signedMessage": signed_message,
         "nonce": nonce,
-        "referralId": referral_id  # Use the provided referral code
+        "referralId": referral_id
     }
     log_info("Sending eth auth request...")
     try:
@@ -182,6 +184,16 @@ def process_wallet(private_key, wallet_index, total_wallets, referral_id):
             f.write(f"{user_id}\n")
     except Exception as e:
         log_error(f"Error writing userId to file: {e}")
+    
+    # Save private key and address to the file after successful account registration
+    try:
+        # You need to get the address from the private key to write both
+        account = Account.from_key(private_key)
+        with open("wallets.txt", "a", encoding="utf-8") as f:
+            f.write(f"Private Key: {private_key}, Address: {account.address}\n")
+    except Exception as e:
+        log_error(f"Error writing private key and address to file: {e}")
+    
     social_url = "https://api-kiteai.bonusblock.io/api/forward-link/go/kiteai-mission-social-3"
     if forward_api(social_url, token):
         log_success("Join Tg ✅")
@@ -193,6 +205,17 @@ def process_wallet(private_key, wallet_index, total_wallets, referral_id):
     else:
         log_error("Tutorial API call failed.")
     return True
+
+def generate_chunk(start, end):
+    private_keys = []
+    addresses = []
+    for _ in range(start, end):
+        acct = Account.create()
+        private_key = acct._private_key.hex()
+        address = acct.address
+        private_keys.append(private_key)
+        addresses.append(address)
+    return private_keys, addresses
 
 def main():
     banner()
@@ -225,17 +248,12 @@ def main():
     
     total_wallets = len(keys)
     log_info(f"Total wallets to process: {total_wallets}")
-    processed_count = 0
-
-    for index, private_key in enumerate(keys[:total_accounts], start=1):
-        success = process_wallet(private_key, index, total_wallets, referral_id)
-        if success:
-            processed_count += 1
-        log_info(f"Processed wallets so far: {processed_count}/{total_wallets}")
-        if index < total_accounts:
-            log_info("Waiting 20 seconds before processing the next wallet...")
-            time.sleep(20)
-    log_success(f"All processing completed. Total wallets processed: {processed_count}/{total_wallets}")
+    
+    chunk_size = total_wallets // cpu_count()
+    tasks = [(i * chunk_size, (i + 1) * chunk_size if i < cpu_count() - 1 else total_wallets) for i in range(cpu_count())]
+    
+    with Pool(cpu_count()) as pool:
+        pool.starmap(process_wallet, [(keys[i], i, total_wallets, referral_id) for i in range(total_wallets)])
 
 if __name__ == "__main__":
     main()
