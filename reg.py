@@ -2,11 +2,10 @@ import requests
 import time
 import datetime
 import json
-import sys
 import random
-from colorama import init, Fore, Style
 from eth_account import Account
 from eth_account.messages import encode_defunct
+from colorama import init, Fore, Style
 from multiprocessing import Pool, cpu_count
 
 init(autoreset=True)
@@ -64,11 +63,7 @@ def get_auth_ticket(nonce):
     try:
         response = requests.post(url, headers=headers, json=body, proxies=get_proxies())
         log_info(f"Response status code: {response.status_code}")
-        log_success("Raw response:")
-        print(response.text)
         data = response.json()
-        log_success("Parsed JSON response:")
-        print(json.dumps(data, indent=2))
         return data
     except Exception as e:
         log_error(f"Error in get-auth-ticket request: {e}")
@@ -107,15 +102,9 @@ def eth_auth(signed_message, nonce, referral_id):
         "nonce": nonce,
         "referralId": referral_id
     }
-    log_info("Sending eth auth request...")
     try:
         response = requests.post(url, headers=headers, json=body, proxies=get_proxies())
-        log_info(f"Response status code: {response.status_code}")
-        log_success("Raw response:")
-        print(response.text)
         data = response.json()
-        log_success("Parsed JSON response:")
-        print(json.dumps(data, indent=2))
         if data.get("success") and data.get("payload"):
             token = data["payload"]["session"]["token"]
             user_id = data["payload"]["account"]["userId"]
@@ -140,18 +129,9 @@ def forward_api(url, token):
         "sec-fetch-site": "cross-site",
         "x-auth-token": token
     }
-    log_info(f"Sending POST request to {url} with x-auth-token.")
     try:
         response = requests.post(url, headers=headers, json=None, proxies=get_proxies())
-        log_info(f"Response status code: {response.status_code}")
-        log_success("Raw response:")
-        print(response.text)
-        try:
-            data = response.json()
-            log_success("Parsed JSON response:")
-            print(json.dumps(data, indent=2))
-        except Exception:
-            log_error("Response is not valid JSON.")
+        data = response.json()
         return True
     except Exception as e:
         log_error(f"Error calling {url}: {e}")
@@ -179,43 +159,30 @@ def process_wallet(private_key, wallet_index, total_wallets, referral_id):
         log_error("eth auth failed. Skipping wallet.")
         return False
     log_success("Account reg ✅")
-    try:
-        with open("userids.txt", "a", encoding="utf-8") as f:
-            f.write(f"{user_id}\n")
-    except Exception as e:
-        log_error(f"Error writing userId to file: {e}")
+    
+    # Save user ID
+    with open("userids.txt", "a", encoding="utf-8") as f:
+        f.write(f"{user_id}\n")
     
     # Save private key and address to the file after successful account registration
-    try:
-        # You need to get the address from the private key to write both
-        account = Account.from_key(private_key)
-        with open("wallets.txt", "a", encoding="utf-8") as f:
-            f.write(f"Private Key: {private_key}, Address: {account.address}\n")
-    except Exception as e:
-        log_error(f"Error writing private key and address to file: {e}")
+    account = Account.from_key(private_key)
+    with open("wallets.txt", "a", encoding="utf-8") as f:
+        f.write(f"Private Key: {private_key}, Address: {account.address}\n")
     
+    # Simulate API calls
     social_url = "https://api-kiteai.bonusblock.io/api/forward-link/go/kiteai-mission-social-3"
     if forward_api(social_url, token):
         log_success("Join Tg ✅")
     else:
         log_error("Social API call failed.")
+    
     tutorial_url = "https://api-kiteai.bonusblock.io/api/forward-link/go/kiteai-mission-tutorial-1"
     if forward_api(tutorial_url, token):
         log_success("Complete tutorial ✅")
     else:
         log_error("Tutorial API call failed.")
+    
     return True
-
-def generate_chunk(start, end):
-    private_keys = []
-    addresses = []
-    for _ in range(start, end):
-        acct = Account.create()
-        private_key = acct._private_key.hex()
-        address = acct.address
-        private_keys.append(private_key)
-        addresses.append(address)
-    return private_keys, addresses
 
 def main():
     banner()
@@ -244,16 +211,13 @@ def main():
             keys = [line.strip() for line in f if line.strip()]
     except Exception as e:
         log_error(f"Error reading key.txt: {e}")
-        sys.exit(1)
+        return
     
     total_wallets = len(keys)
     log_info(f"Total wallets to process: {total_wallets}")
     
-    chunk_size = total_wallets // cpu_count()
-    tasks = [(i * chunk_size, (i + 1) * chunk_size if i < cpu_count() - 1 else total_wallets) for i in range(cpu_count())]
-    
-    with Pool(cpu_count()) as pool:
-        pool.starmap(process_wallet, [(keys[i], i, total_wallets, referral_id) for i in range(total_wallets)])
+    for wallet_index, private_key in enumerate(keys, start=1):
+        process_wallet(private_key, wallet_index, total_wallets, referral_id)
 
 if __name__ == "__main__":
     main()
