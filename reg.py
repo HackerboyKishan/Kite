@@ -188,8 +188,8 @@ def process_wallet(private_key, wallet_index, total_wallets, referral_code):
             f.write(f"{private_key}\n")
         
         # Save wallet address correctly
-        acct = Account.privateKeyToAccount(private_key)  
-        wallet_address = acct.address  
+        acct = Account.from_key(private_key)  # Correct method
+        wallet_address = acct.address  # Extract the wallet address
         with open("wallet.txt", "a", encoding="utf-8") as f:
             f.write(f"{wallet_address}\n")
         log_success(f"Wallet Address saved: {wallet_address}")
@@ -255,7 +255,7 @@ def main():
         log_info(f"Processed wallets so far: {processed_count}/{total_wallets}")
         if index < total_wallets:
             log_info("Waiting 20 seconds before processing the next wallet...")
-            time.sleep(10)
+            time.sleep(1)
     log_success(f"All processing completed. Total wallets processed: {processed_count}/{total_wallets}")
 
 if __name__ == "__main__":
