@@ -1,11 +1,12 @@
-import requests
+import os
 import time
 import datetime
 import json
+import sys
 import random
+from colorama import init, Fore, Style
 from eth_account import Account
 from eth_account.messages import encode_defunct
-from colorama import init, Fore, Style
 from multiprocessing import Pool, cpu_count
 
 init(autoreset=True)
@@ -63,7 +64,11 @@ def get_auth_ticket(nonce):
     try:
         response = requests.post(url, headers=headers, json=body, proxies=get_proxies())
         log_info(f"Response status code: {response.status_code}")
+        log_success("Raw response:")
+        print(response.text)
         data = response.json()
+        log_success("Parsed JSON response:")
+        print(json.dumps(data, indent=2))
         return data
     except Exception as e:
         log_error(f"Error in get-auth-ticket request: {e}")
@@ -82,7 +87,7 @@ def sign_payload(payload, private_key):
         log_error(f"Error signing payload: {e}")
         return None
 
-def eth_auth(signed_message, nonce, referral_id):
+def eth_auth(signed_message, nonce, referral_code):
     url = "https://api-kiteai.bonusblock.io/api/auth/eth"
     headers = {
         "accept": "application/json, text/plain, */*",
@@ -100,11 +105,17 @@ def eth_auth(signed_message, nonce, referral_id):
         "blockchainName": "ethereum",
         "signedMessage": signed_message,
         "nonce": nonce,
-        "referralId": referral_id
+        "referralId": referral_code  # Using referral code provided by the user
     }
+    log_info("Sending eth auth request...")
     try:
         response = requests.post(url, headers=headers, json=body, proxies=get_proxies())
+        log_info(f"Response status code: {response.status_code}")
+        log_success("Raw response:")
+        print(response.text)
         data = response.json()
+        log_success("Parsed JSON response:")
+        print(json.dumps(data, indent=2))
         if data.get("success") and data.get("payload"):
             token = data["payload"]["session"]["token"]
             user_id = data["payload"]["account"]["userId"]
@@ -129,15 +140,24 @@ def forward_api(url, token):
         "sec-fetch-site": "cross-site",
         "x-auth-token": token
     }
+    log_info(f"Sending POST request to {url} with x-auth-token.")
     try:
         response = requests.post(url, headers=headers, json=None, proxies=get_proxies())
-        data = response.json()
+        log_info(f"Response status code: {response.status_code}")
+        log_success("Raw response:")
+        print(response.text)
+        try:
+            data = response.json()
+            log_success("Parsed JSON response:")
+            print(json.dumps(data, indent=2))
+        except Exception:
+            log_error("Response is not valid JSON.")
         return True
     except Exception as e:
         log_error(f"Error calling {url}: {e}")
         return False
 
-def process_wallet(private_key, wallet_index, total_wallets, referral_id):
+def process_wallet(private_key, wallet_index, total_wallets, referral_code):
     log_info(f"Processing wallet {wallet_index}/{total_wallets}...")
     nonce = f"timestamp_{int(time.time() * 1000)}"
     log_info(f"Using nonce: {nonce}")
@@ -154,42 +174,49 @@ def process_wallet(private_key, wallet_index, total_wallets, referral_id):
     if not signed_message:
         log_error("Failed to sign message. Skipping wallet.")
         return False
-    token, user_id = eth_auth(signed_message, nonce, referral_id)
+    token, user_id = eth_auth(signed_message, nonce, referral_code)
     if token is None or user_id is None:
         log_error("eth auth failed. Skipping wallet.")
         return False
     log_success("Account reg ✅")
-    
-    # Save user ID
-    with open("userids.txt", "a", encoding="utf-8") as f:
-        f.write(f"{user_id}\n")
-    
-    # Save private key and address to the file after successful account registration
-    account = Account.from_key(private_key)
-    with open("wallets.txt", "a", encoding="utf-8") as f:
-        f.write(f"Private Key: {private_key}, Address: {account.address}\n")
-    
-    # Simulate API calls
+    try:
+        with open("userids.txt", "a", encoding="utf-8") as f:
+            f.write(f"{user_id}\n")
+        with open("key.txt", "a", encoding="utf-8") as f:
+            f.write(f"{private_key}\n")
+        with open("wallet.txt", "a", encoding="utf-8") as f:
+            f.write(f"{Account.privateKeyToAccount(private_key).address}\n")
+    except Exception as e:
+        log_error(f"Error saving user data: {e}")
+        return False
     social_url = "https://api-kiteai.bonusblock.io/api/forward-link/go/kiteai-mission-social-3"
     if forward_api(social_url, token):
         log_success("Join Tg ✅")
     else:
         log_error("Social API call failed.")
-    
     tutorial_url = "https://api-kiteai.bonusblock.io/api/forward-link/go/kiteai-mission-tutorial-1"
     if forward_api(tutorial_url, token):
         log_success("Complete tutorial ✅")
     else:
         log_error("Tutorial API call failed.")
-    
     return True
+
+def generate_keys(num_keys):
+    private_keys = []
+    addresses = []
+    for _ in range(num_keys):
+        acct = Account.create()
+        private_key = acct._private_key.hex()
+        address = acct.address
+        private_keys.append(private_key)
+        addresses.append(address)
+    return private_keys, addresses
 
 def main():
     banner()
-    
-    referral_id = input("Enter your referral code: ").strip()
-    total_accounts = int(input("How many accounts do you want to process? "))
-    
+    referral_code = input("Enter your referral code: ").strip()
+    num_refer = int(input("How many wallets would you like to refer?: ").strip())
+
     use_proxy_input = input("Do you want to use a proxy? (yes/no): ").strip().lower()
     global USE_PROXY, proxies_list
     if use_proxy_input in ["yes", "y"]:
@@ -205,19 +232,21 @@ def main():
             USE_PROXY = False
     else:
         USE_PROXY = False
-    
-    try:
-        with open("key.txt", "r", encoding="utf-8") as f:
-            keys = [line.strip() for line in f if line.strip()]
-    except Exception as e:
-        log_error(f"Error reading key.txt: {e}")
-        return
-    
-    total_wallets = len(keys)
+
+    private_keys, _ = generate_keys(num_refer)
+    total_wallets = len(private_keys)
     log_info(f"Total wallets to process: {total_wallets}")
-    
-    for wallet_index, private_key in enumerate(keys, start=1):
-        process_wallet(private_key, wallet_index, total_wallets, referral_id)
+    processed_count = 0
+
+    for index, private_key in enumerate(private_keys, start=1):
+        success = process_wallet(private_key, index, total_wallets, referral_code)
+        if success:
+            processed_count += 1
+        log_info(f"Processed wallets so far: {processed_count}/{total_wallets}")
+        if index < total_wallets:
+            log_info("Waiting 20 seconds before processing the next wallet...")
+            time.sleep(1)
+    log_success(f"All processing completed. Total wallets processed: {processed_count}/{total_wallets}")
 
 if __name__ == "__main__":
     main()
