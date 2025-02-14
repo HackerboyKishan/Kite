@@ -8,6 +8,7 @@ from colorama import init, Fore, Style
 from eth_account import Account
 from eth_account.messages import encode_defunct
 from multiprocessing import Pool, cpu_count
+import requests  # <-- Add this import for the requests library
 
 init(autoreset=True)
 
@@ -62,7 +63,7 @@ def get_auth_ticket(nonce):
     }
     log_info(f"Sending POST request to {url} with nonce: {nonce}")
     try:
-        response = requests.post(url, headers=headers, json=body, proxies=get_proxies())
+        response = requests.post(url, headers=headers, json=body, proxies=get_proxies())  # <-- Using requests.post here
         log_info(f"Response status code: {response.status_code}")
         log_success("Raw response:")
         print(response.text)
@@ -109,7 +110,7 @@ def eth_auth(signed_message, nonce, referral_code):
     }
     log_info("Sending eth auth request...")
     try:
-        response = requests.post(url, headers=headers, json=body, proxies=get_proxies())
+        response = requests.post(url, headers=headers, json=body, proxies=get_proxies())  # <-- Using requests.post here
         log_info(f"Response status code: {response.status_code}")
         log_success("Raw response:")
         print(response.text)
@@ -142,7 +143,7 @@ def forward_api(url, token):
     }
     log_info(f"Sending POST request to {url} with x-auth-token.")
     try:
-        response = requests.post(url, headers=headers, json=None, proxies=get_proxies())
+        response = requests.post(url, headers=headers, json=None, proxies=get_proxies())  # <-- Using requests.post here
         log_info(f"Response status code: {response.status_code}")
         log_success("Raw response:")
         print(response.text)
