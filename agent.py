@@ -166,7 +166,7 @@ def main():
     print(colored(f"\n📊 Iterations per agent: {iterations}", 'blue'))
 
     # Using ThreadPoolExecutor to run all 100 wallets concurrently
-    with ThreadPoolExecutor() as executor:  # No limit on workers
+    with ThreadPoolExecutor(max_workers=100) as executor:
         futures = []
         for wallet in wallets:
             futures.append(executor.submit(process_wallet, wallet, agent_ids, iterations))
@@ -177,3 +177,6 @@ def main():
 
 if __name__ == "__main__":
     main()
+
+Make this code 
+100 wallet to all wallet process in one time
