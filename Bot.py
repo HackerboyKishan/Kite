@@ -177,6 +177,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
-Make this code 
-100 wallet to all wallet process in one time
