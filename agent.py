@@ -150,6 +150,9 @@ def run_worker(wallet, agent_ids, iterations):
 def main():
     display_app_title()
     wallets = get_wallets()
+
+    # Limit the number of wallets to 100
+    wallets = wallets[:100]  # Adjust as needed
     agent_choice = input(colored('🤖 Select Agent (1: Professor 🧠, 2: Crypto Buddy 💰, 3: Sherlock 🔎, 4: All): ', 'yellow'))
     input_iterations = input(colored('🔢 Enter the number of iterations per agent: ', 'yellow'))
     multi_thread = input(colored('⚡ Enable Multi-threading? (yes/no): ', 'yellow'))
