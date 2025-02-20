@@ -4,7 +4,7 @@ import json
 import time
 import random
 import requests
-from threading import Thread
+from concurrent.futures import ThreadPoolExecutor
 from termcolor import colored
 from colorama import init
 
@@ -41,7 +41,10 @@ def get_wallets():
         sys.exit(1)
     with open('wallet.txt', 'r') as f:
         wallets = [line.strip() for line in f if line.strip()]
-    return wallets
+    if len(wallets) < 100:
+        print(colored('⚠️ Not enough wallets in wallet.txt. Ensure there are at least 100 wallets.', 'red'))
+        sys.exit(1)
+    return wallets[:100]
 
 def get_random_questions():
     default_questions = [
@@ -106,7 +109,7 @@ def report_usage(wallet, options):
         print(colored(f'⚠️ Failed to report usage: {e}', 'red'))
         return False
 
-def run_sequential(wallet, agent_ids, iterations):
+def process_wallet(wallet, agent_ids, iterations):
     for agent_choice in agent_ids:
         agent = agents.get(agent_choice)
         if not agent:
@@ -139,23 +142,12 @@ def run_sequential(wallet, agent_ids, iterations):
                 success_count += 1
         print(colored('----------------------------------------', 'white'))
 
-def run_worker(wallet, agent_ids, iterations):
-    """
-    Start a new thread to handle processing for a single wallet.
-    """
-    thread = Thread(target=run_sequential, args=(wallet, agent_ids, iterations))
-    thread.start()
-    return thread
-
 def main():
     display_app_title()
     wallets = get_wallets()
 
-    # Limit the number of wallets to 100
-    wallets = wallets[:100]  # Adjust as needed
     agent_choice = input(colored('🤖 Select Agent (1: Professor 🧠, 2: Crypto Buddy 💰, 3: Sherlock 🔎, 4: All): ', 'yellow'))
     input_iterations = input(colored('🔢 Enter the number of iterations per agent: ', 'yellow'))
-    multi_thread = input(colored('⚡ Enable Multi-threading? (yes/no): ', 'yellow'))
 
     try:
         iterations = int(input_iterations)
@@ -172,19 +164,16 @@ def main():
         sys.exit(1)
 
     print(colored(f"\n📊 Iterations per agent: {iterations}", 'blue'))
-    mt_enabled = multi_thread.strip().lower() == "yes"
-    print(colored(f"⚡ Multi-threading: {'Enabled' if mt_enabled else 'Disabled'}\n", 'blue'))
 
-    if mt_enabled:
-        threads = []
+    # Using ThreadPoolExecutor to run all 100 wallets concurrently
+    with ThreadPoolExecutor(max_workers=100) as executor:
+        futures = []
         for wallet in wallets:
-            t = run_worker(wallet, agent_ids, iterations)
-            threads.append(t)
-        for t in threads:
-            t.join()
-    else:
-        for wallet in wallets:
-            run_sequential(wallet, agent_ids, iterations)
+            futures.append(executor.submit(process_wallet, wallet, agent_ids, iterations))
+        
+        # Wait for all threads to complete
+        for future in futures:
+            future.result()  # Block until each thread completes
 
 if __name__ == "__main__":
     main()
